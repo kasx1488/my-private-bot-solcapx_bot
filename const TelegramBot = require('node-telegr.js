@@ -1,6 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 
-const TOKEN = process.env.BOT_TOKEN || 'ВОТ_ТВОЙ_ТОКЕН';
+const TOKEN = process.env.8724941769:AAGFuNDFWCFzHjL6s4vBhxZlQ_PqD4YHCVE || 'ВОТ_ТВОЙ_ТОКЕН';
 const ADMIN_ID = '587704400';
 const FREE_CHANNEL = '@solcapx';
 const LANDING = 'https://solcap.lol';
