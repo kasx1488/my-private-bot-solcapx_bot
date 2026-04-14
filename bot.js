@@ -2,16 +2,18 @@ const TelegramBot = require('node-telegram-bot-api');
 
 const TOKEN = process.env.BOT_TOKEN || '8724941769:AAGFuNDFWCFzHjL6s4vBhxZlQ_PqD4YHCVE';
 const ADMIN_ID = '587704400';
-const FREE_CHANNEL = '@solcapx';
+const FREE_CHANNEL = 'https://t.me/buytrenchess';
 const LANDING = 'https://solcap.lol';
 
-let VOICE_FILE_ID = '';
+let PHOTO_INTRO_ID = process.env.PHOTO_INTRO_ID || '';
+let VOICE_ID = process.env.VOICE_ID || '';
+let RESULTS_IDS = process.env.RESULTS_IDS ? process.env.RESULTS_IDS.split(',') : [];
 
 const bot = new TelegramBot(TOKEN, { polling: true });
 const userState = new Map();
 const followUpTimers = new Map();
+const setupBuffer = new Map();
 
-// КНОПКИ
 const KB_EXPERIENCE = {
   inline_keyboard: [
     [{ text: '🔰 Just getting started', callback_data: 'exp_beginner' }],
@@ -43,129 +45,94 @@ const KB_PAYMENT = {
   ]
 };
 
-// ЗАПУСК
-bot.onText(/\/start/, async (msg) => {
-  const id = msg.from.id;
-  userState.set(id, 'experience');
+const INTRO_TEXT =
+  "Hey, how's it going? Captain Sol here.\n\n" +
+  "I'm a trader on Solana. I track smart money wallets and get into trades before the market even knows what's happening.\n\n" +
+  "Glad you stopped by. I started from nothing — small town, no connections, lost a hundred grand trying to figure this out. Now I run a system that just keeps printing.\n\n" +
+  "I'm selective about who gets in. Check out my results and listen to the voice message 👇";
 
-  if (VOICE_FILE_ID) {
-    await bot.sendVoice(id, VOICE_FILE_ID);
-    await delay(1500);
-  } else {
-    await bot.sendMessage(id,
-      "Hey, what's up. Captain Sol here.\n\nI'm a Solana trader. I track smart money wallets and get in before the market even sniffs it.\n\nStarted from nothing — lost a hundred grand figuring this out. Now I run a system that consistently prints.\n\nI'm selective about who gets in. Let me ask you a couple quick questions."
-    );
-  }
+const RESULTS_TEXT =
+  "My recent trades 👇\n\n" +
+  "+$80,300 on $PURCH (+190%)\n" +
+  "+$8,158 on $BLOXX (+67%)\n" +
+  "+$4,129 on $ISO (+158%)\n" +
+  "+$2,371 on $VAULT (+537%)\n\n" +
+  "Not lucky trades. A system.\n" +
+  "Built after losing $100K learning how smart money actually moves.";
 
-  await bot.sendMessage(id, 'How long have you been trading crypto? 👇', {
-    reply_markup: KB_EXPERIENCE
-  });
-});
+const TRANSITION_TEXT = "Ready to move with me bro? Answer a few questions below 👇";
 
-// SETUP — получить file_id голосового
-bot.onText(/\/setup/, async (msg) => {
-  const id = msg.from.id;
-  if (String(id) !== ADMIN_ID) return;
-  userState.set(id, 'setup_voice');
-  await bot.sendMessage(id, 'Отправь голосовое — верну file_id.');
-});
+const BEGINNER_TEXT =
+  "Appreciate the honesty.\n\n" +
+  "Real talk — the private group isn't where you wanna start. We don't do basics in there, we trade.\n\n" +
+  "But the free channel is exactly where you should be right now.\n\n" +
+  "Real calls, full breakdowns, zero noise. Watch how I move for a few weeks.\n\n" +
+  "→ " + FREE_CHANNEL + "\n\n" +
+  "When you're ready to go deeper, you'll know where to find me. 🤙";
 
-// ВХОДЯЩИЕ СООБЩЕНИЯ
-bot.on('message', async (msg) => {
-  const id = msg.from.id;
-  const state = userState.get(id);
+const MID_PRO_TEXT =
+  "Solid. You know enough to know what you've been missing.\n\n" +
+  "What's your biggest problem right now when trading? 👇";
 
-  if (state === 'setup_voice' && msg.voice) {
-    VOICE_FILE_ID = msg.voice.file_id;
-    await bot.sendMessage(id, 'file_id голосового:\n\n' + VOICE_FILE_ID + '\n\nСохрани это значение.');
-    userState.set(id, 'done');
-    return;
-  }
+const PAIN_TEXTS = {
+  pain_late:
+    "Yeah. That's the game when you're watching price instead of wallets.\n\n" +
+    "By the time CT posts about it — smart money already exited. You're buying their bags.\n\n" +
+    "Inside the private group you see exactly when the right wallets start moving — before the announcement, before the pump.\n\n" +
+    "That's the edge. 🎯",
+  pain_ct:
+    "Classic. You ape in, they've already closed their position. You're the exit liquidity.\n\n" +
+    "I don't post calls based on vibes. Every move is based on wallet data — the same wallets that consistently print.\n\n" +
+    "No hype. Just the system. 📊",
+  pain_sm:
+    "Most people can't — it takes hours of manual wallet analysis every day.\n\n" +
+    "That's why I built the bot.\n\n" +
+    "It monitors the wallets that consistently print 24/7 and alerts you in real time when they start moving.\n\n" +
+    "You see the move as it happens. Not after. 🔍",
+  pain_pump:
+    "That's what happens when you're reacting instead of positioning.\n\n" +
+    "Inside the group — you get the call before the move. Entry point, logic, risk level. All laid out.\n\n" +
+    "No more panic buys at the top. 📈"
+};
 
-  if (state === 'question' && msg.text && !msg.text.startsWith('/')) {
-    await bot.sendMessage(ADMIN_ID,
-      'Вопрос от @' + (msg.from.username || id) + ':\n\n' + msg.text
-    );
-    await bot.sendMessage(id, "Got it. I'll get back to you shortly. 🤙");
-  }
-});
+const OFFER_TEXT =
+  "Here's what's inside the private group:\n\n" +
+  "→ My personal calls — every project I'm personally aping into, with full reasoning\n" +
+  "→ The alpha bot — real-time smart money wallet tracking\n" +
+  "→ Full trade breakdowns — wins AND losses, no sugarcoating\n" +
+  "→ Elite community — traders who actually print\n\n" +
+  "$99/month or $499 lifetime.\n\n" +
+  "I review every application. Not everyone gets in.\n\n" +
+  "You in? 👇";
 
-// КНОПКИ
-bot.on('callback_query', async (query) => {
-  const id = query.from.id;
-  const data = query.data;
-  await bot.answerCallbackQuery(query.id);
+const PAYMENT_TEXT =
+  "Let's go. 🔥\n\n" +
+  "Choose your plan:\n\n" +
+  "💳 Monthly — $99/month\n" +
+  "♾️ Lifetime — $499 one-time\n\n" +
+  "Once confirmed — you're in within the hour.\n" +
+  "Any issues — reply here, I'll sort it personally.\n\n" +
+  "See you inside. 🫡";
 
-  // ОПЫТ
-  if (data === 'exp_beginner') {
-    userState.set(id, 'beginner');
-    await bot.sendMessage(id,
-      "Appreciate the honesty.\n\nReal talk — the private group isn't where you wanna start. We don't do basics in there, we trade.\n\nBut the free channel? That's exactly where you should be right now.\n\nReal calls, full breakdowns, zero noise. Watch how I move for a few weeks.\n\n→ " + FREE_CHANNEL + "\n\nWhen you're ready to go deeper, you'll know where to find me. 🤙"
-    );
-    return;
-  }
+const QUESTION_TEXT = "Go ahead — what's on your mind? 👇";
 
-  if (data === 'exp_mid' || data === 'exp_pro') {
-    userState.set(id, 'pain');
-    await bot.sendMessage(id,
-      "Solid. You know enough to know what you've been missing.\n\nWhat's your biggest problem right now when trading? 👇",
-      { reply_markup: KB_PAIN }
-    );
-    return;
-  }
+const FOLLOWUP_TEXT =
+  "Hey — checking in.\n\n" +
+  "Had a solid call in the group today. +180% in 31 hours.\n\n" +
+  "The system works. When you're ready 👇\n\n" +
+  LANDING + "\n\n" +
+  "Catch you in the trenches. 🤙";
 
-  // БОЛЬ
-  const painMessages = {
-    pain_late: "Yeah. That's the game when you're watching price instead of wallets.\n\nBy the time CT posts about it — smart money already exited. You're buying their bags.\n\nInside the private group you see exactly when the right wallets start moving — before the announcement, before the pump.\n\nThat's the edge. 🎯",
-    pain_ct: "Classic. You ape in, they've already closed their position. You're the exit liquidity.\n\nI don't post calls based on vibes. Every move is based on wallet data — the same wallets that consistently print.\n\nNo hype. Just the system. 📊",
-    pain_sm: "Most people can't — it takes hours of manual wallet analysis every day.\n\nThat's why I built the bot.\n\nIt monitors the wallets that consistently print 24/7 and alerts you in real time when they start moving.\n\nYou see the move as it happens. Not after. 🔍",
-    pain_pump: "That's what happens when you're reacting instead of positioning.\n\nInside the group — you get the call before the move. Entry point, logic, risk level. All laid out.\n\nNo more panic buys at the top. 📈"
-  };
+function delay(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
 
-  if (painMessages[data]) {
-    userState.set(id, 'offer');
-    await bot.sendMessage(id, painMessages[data]);
-    await delay(1000);
-    await bot.sendMessage(id,
-      "Here's what's inside the private group:\n\n→ My personal calls — every project I'm personally aping into, with full reasoning\n→ The alpha bot — real-time smart money wallet tracking\n→ Full trade breakdowns — wins AND losses, no sugarcoating\n→ Elite community — traders who actually print\n\n$99/month or $499 lifetime.\n\nI review every application. Not everyone gets in.\n\nYou in? 👇",
-      { reply_markup: KB_OFFER }
-    );
-    scheduleFollowUp(id);
-    return;
-  }
-
-  // ОФФЕР
-  if (data === 'offer_yes') {
-    userState.set(id, 'payment');
-    await bot.sendMessage(id,
-      "Let's go. 🔥\n\nChoose your plan below 👇\n\nOnce confirmed — you're in within the hour.\nAny issues — just reply here, I'll sort it personally.\n\nSee you inside. 🫡",
-      { reply_markup: KB_PAYMENT }
-    );
-    await bot.sendMessage(ADMIN_ID,
-      '🔥 Горячий лид! @' + (query.from.username || id) + ' нажал "Lets do it"'
-    );
-    return;
-  }
-
-  if (data === 'offer_question') {
-    userState.set(id, 'question');
-    await bot.sendMessage(id, "Go ahead — what's on your mind? 👇");
-    await bot.sendMessage(ADMIN_ID,
-      '❓ Лид с вопросом: @' + (query.from.username || id)
-    );
-    return;
-  }
-});
-
-// ДОЖИМ ЧЕРЕЗ 24 ЧАСА
 function scheduleFollowUp(userId) {
   if (followUpTimers.has(userId)) clearTimeout(followUpTimers.get(userId));
   const timer = setTimeout(async () => {
     if (userState.get(userId) !== 'purchased') {
       try {
-        await bot.sendMessage(userId,
-          "Hey — checking in.\n\nSaw you didn't grab a spot yet. No pressure.\n\nJust wanted to drop this — had a solid call in the group today. +180% in 31 hours.\n\nThe system works. When you're ready 👇\n\n" + LANDING + "\n\nCatch you in the trenches. 🤙"
-        );
+        await bot.sendMessage(userId, FOLLOWUP_TEXT);
       } catch (e) {
         console.log('Follow-up error:', e.message);
       }
@@ -175,8 +142,165 @@ function scheduleFollowUp(userId) {
   followUpTimers.set(userId, timer);
 }
 
-function delay(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
+bot.onText(/\/start/, async (msg) => {
+  const id = msg.from.id;
+  userState.set(id, 'experience');
 
-console.log('Bot started...');
+  try {
+    if (PHOTO_INTRO_ID) {
+      await bot.sendPhoto(id, PHOTO_INTRO_ID, { caption: INTRO_TEXT });
+    } else {
+      await bot.sendMessage(id, INTRO_TEXT);
+    }
+
+    await delay(1500);
+
+    if (VOICE_ID) {
+      await bot.sendVoice(id, VOICE_ID);
+      await delay(2000);
+    }
+
+    if (RESULTS_IDS.length > 0) {
+      if (RESULTS_IDS.length === 1) {
+        await bot.sendPhoto(id, RESULTS_IDS[0], { caption: RESULTS_TEXT });
+      } else {
+        const media = RESULTS_IDS.map((rid, i) => ({
+          type: 'photo',
+          media: rid,
+          ...(i === 0 ? { caption: RESULTS_TEXT } : {})
+        }));
+        await bot.sendMediaGroup(id, media);
+      }
+    } else {
+      await bot.sendMessage(id, RESULTS_TEXT);
+    }
+
+    await delay(1000);
+
+    await bot.sendMessage(id, TRANSITION_TEXT, {
+      reply_markup: KB_EXPERIENCE
+    });
+
+  } catch (e) {
+    console.error('Start error:', e.message);
+  }
+});
+
+bot.onText(/\/setup/, async (msg) => {
+  const id = msg.from.id;
+  if (String(id) !== ADMIN_ID) return;
+
+  setupBuffer.set(id, { results: [] });
+  userState.set(id, 'setup_photo');
+
+  await bot.sendMessage(id,
+    '🛠 Начинаем настройку медиа.\n\n' +
+    'Шаг 1/3: Отправь мне фото которое будет в первом сообщении.'
+  );
+});
+
+bot.onText(/\/done/, async (msg) => {
+  const id = msg.from.id;
+  if (String(id) !== ADMIN_ID) return;
+  if (userState.get(id) !== 'setup_results') return;
+
+  const buffer = setupBuffer.get(id) || {};
+  const resultsIds = buffer.results || [];
+  RESULTS_IDS = resultsIds;
+
+  await bot.sendMessage(id,
+    '✅ Настройка завершена!\n\n' +
+    'Сохрани эти значения:\n\n' +
+    'PHOTO_INTRO_ID=' + PHOTO_INTRO_ID + '\n' +
+    'VOICE_ID=' + VOICE_ID + '\n' +
+    'RESULTS_IDS=' + resultsIds.join(',') + '\n\n' +
+    'Добавь их в переменные окружения на Railway.'
+  );
+
+  userState.set(id, 'done');
+  setupBuffer.delete(id);
+});
+
+bot.on('message', async (msg) => {
+  const id = msg.from.id;
+  const state = userState.get(id);
+
+  if (state === 'setup_photo' && msg.photo) {
+    const fileId = msg.photo[msg.photo.length - 1].file_id;
+    PHOTO_INTRO_ID = fileId;
+    const buffer = setupBuffer.get(id) || { results: [] };
+    buffer.photoId = fileId;
+    setupBuffer.set(id, buffer);
+    userState.set(id, 'setup_voice');
+    await bot.sendMessage(id, '✅ Фото сохранено!\n\nШаг 2/3: Теперь отправь голосовое сообщение.');
+    return;
+  }
+
+  if (state === 'setup_voice' && msg.voice) {
+    const fileId = msg.voice.file_id;
+    VOICE_ID = fileId;
+    const buffer = setupBuffer.get(id) || { results: [] };
+    buffer.voiceId = fileId;
+    setupBuffer.set(id, buffer);
+    userState.set(id, 'setup_results');
+    await bot.sendMessage(id, '✅ Голосовое сохранено!\n\nШаг 3/3: Отправляй скрины результатов по одному.\nКогда закончишь — напиши /done');
+    return;
+  }
+
+  if (state === 'setup_results' && msg.photo) {
+    const fileId = msg.photo[msg.photo.length - 1].file_id;
+    const buffer = setupBuffer.get(id) || { results: [] };
+    buffer.results.push(fileId);
+    setupBuffer.set(id, buffer);
+    await bot.sendMessage(id, '✅ Скрин ' + buffer.results.length + ' добавлен. Отправляй следующий или напиши /done');
+    return;
+  }
+
+  if (state === 'question' && msg.text && !msg.text.startsWith('/')) {
+    await bot.sendMessage(ADMIN_ID, '❓ Вопрос от @' + (msg.from.username || id) + ':\n\n' + msg.text);
+    await bot.sendMessage(id, "Got it. I'll get back to you shortly. 🤙");
+  }
+});
+
+bot.on('callback_query', async (query) => {
+  const id = query.from.id;
+  const data = query.data;
+  await bot.answerCallbackQuery(query.id);
+
+  if (data === 'exp_beginner') {
+    userState.set(id, 'beginner');
+    await bot.sendMessage(id, BEGINNER_TEXT);
+    return;
+  }
+
+  if (data === 'exp_mid' || data === 'exp_pro') {
+    userState.set(id, 'pain');
+    await bot.sendMessage(id, MID_PRO_TEXT, { reply_markup: KB_PAIN });
+    return;
+  }
+
+  if (PAIN_TEXTS[data]) {
+    userState.set(id, 'offer');
+    await bot.sendMessage(id, PAIN_TEXTS[data]);
+    await delay(1000);
+    await bot.sendMessage(id, OFFER_TEXT, { reply_markup: KB_OFFER });
+    scheduleFollowUp(id);
+    return;
+  }
+
+  if (data === 'offer_yes') {
+    userState.set(id, 'payment');
+    await bot.sendMessage(id, PAYMENT_TEXT, { reply_markup: KB_PAYMENT });
+    await bot.sendMessage(ADMIN_ID, '🔥 Горячий лид!\n@' + (query.from.username || id) + ' нажал "Lets do it"');
+    return;
+  }
+
+  if (data === 'offer_question') {
+    userState.set(id, 'question');
+    await bot.sendMessage(id, QUESTION_TEXT);
+    await bot.sendMessage(ADMIN_ID, '❓ Лид с вопросом: @' + (query.from.username || id));
+    return;
+  }
+});
+
+console.log('🤖 SolCap Bot started...');
