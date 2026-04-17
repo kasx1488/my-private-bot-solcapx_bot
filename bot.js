@@ -86,9 +86,10 @@ const KB_PAYMENT = {
 
 const INTRO_TEXT =
   "Hey, how's it going? Captain Sol here.\n\n" +
+  "solcap.lol"+
   "I'm a trader on Solana. I track smart money wallets and get into trades before the market even knows what's happening.\n\n" +
   "Glad you stopped by. I started from nothing — small town, no connections, lost a hundred grand trying to figure this out. Now I run a system that just keeps printing.\n\n" +
-  "I'm selective about who gets in. Check out my results and listen to the voice message 👇 https://solcap.lol";
+  "I'm selective about who gets in. Check out my results and listen to the voice message 👇";
 const RESULTS_TEXT =
   "My recent trades 👇\n\n" +
   "+$80,300 on $PURCH (+190%)\n" +
