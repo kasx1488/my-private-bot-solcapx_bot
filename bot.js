@@ -1,13 +1,55 @@
 const TelegramBot = require('node-telegram-bot-api');
-
 const TOKEN = process.env.BOT_TOKEN || '8724941769:AAGFuNDFWCFzHjL6s4vBhxZlQ_PqD4YHCVE';
 const ADMIN_ID = '587704400';
 const FREE_CHANNEL = 'https://t.me/solcapx';
 const LANDING = 'https://solcap.lol';
-
 let PHOTO_INTRO_ID = process.env.PHOTO_INTRO_ID || '';
 let VOICE_ID = process.env.VOICE_ID || '';
 let RESULTS_IDS = process.env.RESULTS_IDS ? process.env.RESULTS_IDS.split(',') : [];
+
+// ─── ANALYTICS ───────────────────────────────────────────────────────────────
+const ANALYTICS_URL = 'https://script.google.com/macros/s/AKfycbyrXIZWo82znDiMCmNQONO9DYjsCsVjJlKY0LcxC_w6oSeeJ4zUJh8bxNjaRywwqj61/exec';
+
+function logEvent(userId, username, event, step, data = '') {
+  try {
+    const payload = JSON.stringify({
+      user_id: String(userId),
+      username: username || '',
+      event: event,
+      step: step,
+      data: String(data)
+    });
+
+    function postToUrl(urlString, body) {
+      const url = new URL(urlString);
+      const lib = url.protocol === 'https:' ? require('https') : require('http');
+      const options = {
+        hostname: url.hostname,
+        path: url.pathname + url.search,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body)
+        }
+      };
+      const req = lib.request(options, (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          postToUrl(res.headers.location, body);
+          return;
+        }
+        res.resume();
+      });
+      req.on('error', (e) => console.log('Analytics error:', e.message));
+      req.write(body);
+      req.end();
+    }
+
+    postToUrl(ANALYTICS_URL, payload);
+  } catch (e) {
+    console.log('Analytics error:', e.message);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 const bot = new TelegramBot(TOKEN, { polling: true });
 const userState = new Map();
@@ -21,7 +63,6 @@ const KB_EXPERIENCE = {
     [{ text: '🔥 1+ year in the trenches', callback_data: 'exp_pro' }]
   ]
 };
-
 const KB_PAIN = {
   inline_keyboard: [
     [{ text: '⏰ Always late to entries', callback_data: 'pain_late' }],
@@ -30,14 +71,12 @@ const KB_PAIN = {
     [{ text: '🎢 Missing pumps, catching dumps', callback_data: 'pain_pump' }]
   ]
 };
-
 const KB_OFFER = {
   inline_keyboard: [
     [{ text: '✅ Lets do it', callback_data: 'offer_yes' }],
     [{ text: '❓ I have a question', callback_data: 'offer_question' }]
   ]
 };
-
 const KB_PAYMENT = {
   inline_keyboard: [
     [{ text: '💳 Monthly — $99/mo', url: LANDING }],
@@ -50,7 +89,6 @@ const INTRO_TEXT =
   "I'm a trader on Solana. I track smart money wallets and get into trades before the market even knows what's happening.\n\n" +
   "Glad you stopped by. I started from nothing — small town, no connections, lost a hundred grand trying to figure this out. Now I run a system that just keeps printing.\n\n" +
   "I'm selective about who gets in. Check out my results and listen to the voice message 👇";
-
 const RESULTS_TEXT =
   "My recent trades 👇\n\n" +
   "+$80,300 on $PURCH (+190%)\n" +
@@ -59,9 +97,7 @@ const RESULTS_TEXT =
   "+$2,371 on $VAULT (+537%)\n\n" +
   "Not lucky trades. A system.\n" +
   "Built after losing $100K learning how smart money actually moves.";
-
 const TRANSITION_TEXT = "Ready to move with me bro? Answer a few questions below 👇";
-
 const BEGINNER_TEXT =
   "Appreciate the honesty.\n\n" +
   "Real talk — the private group isn't where you wanna start. We don't do basics in there, we trade.\n\n" +
@@ -69,11 +105,9 @@ const BEGINNER_TEXT =
   "Real calls, full breakdowns, zero noise. Watch how I move for a few weeks.\n\n" +
   "→ " + FREE_CHANNEL + "\n\n" +
   "When you're ready to go deeper, you'll know where to find me. 🤙";
-
 const MID_PRO_TEXT =
   "Solid. You know enough to know what you've been missing.\n\n" +
   "What's your biggest problem right now when trading? 👇";
-
 const PAIN_TEXTS = {
   pain_late:
     "Yeah. That's the game when you're watching price instead of wallets.\n\n" +
@@ -94,7 +128,6 @@ const PAIN_TEXTS = {
     "Inside the group — you get the call before the move. Entry point, logic, risk level. All laid out.\n\n" +
     "No more panic buys at the top. 📈"
 };
-
 const OFFER_TEXT =
   "Here's what's inside the private group:\n\n" +
   "→ My personal calls — every project I'm personally aping into, with full reasoning\n" +
@@ -104,7 +137,6 @@ const OFFER_TEXT =
   "$99/month or $499 lifetime.\n\n" +
   "I review every application. Not everyone gets in.\n\n" +
   "You in? 👇";
-
 const PAYMENT_TEXT =
   "Let's go. 🔥\n\n" +
   "Choose your plan:\n\n" +
@@ -113,9 +145,7 @@ const PAYMENT_TEXT =
   "Once confirmed — you're in within the hour.\n" +
   "Any issues — reply here, I'll sort it personally.\n\n" +
   "See you inside. 🫡";
-
 const QUESTION_TEXT = "Go ahead — what's on your mind? 👇";
-
 const FOLLOWUP_TEXT =
   "Hey — checking in.\n\n" +
   "Had a solid call in the group today. +180% in 31 hours.\n\n" +
@@ -133,6 +163,7 @@ function scheduleFollowUp(userId) {
     if (userState.get(userId) !== 'purchased') {
       try {
         await bot.sendMessage(userId, FOLLOWUP_TEXT);
+        logEvent(userId, '', 'followup_sent', 'followup'); // ANALYTICS
       } catch (e) {
         console.log('Follow-up error:', e.message);
       }
@@ -146,21 +177,20 @@ bot.onText(/\/start/, async (msg) => {
   const id = msg.from.id;
   userState.set(id, 'experience');
 
+  logEvent(id, msg.from.username, 'bot_start', 'start'); // ANALYTICS
+
   try {
     if (PHOTO_INTRO_ID) {
       await bot.sendPhoto(id, PHOTO_INTRO_ID, { caption: INTRO_TEXT });
     } else {
       await bot.sendMessage(id, INTRO_TEXT);
     }
-
     await delay(1500);
-
     if (VOICE_ID) {
       await bot.sendVoice(id, VOICE_ID);
       const randomDelay = Math.floor(Math.random() * 10000) + 30000;
       await delay(randomDelay);
     }
-
     if (RESULTS_IDS.length > 0) {
       if (RESULTS_IDS.length === 1) {
         await bot.sendPhoto(id, RESULTS_IDS[0], { caption: RESULTS_TEXT });
@@ -175,13 +205,10 @@ bot.onText(/\/start/, async (msg) => {
     } else {
       await bot.sendMessage(id, RESULTS_TEXT);
     }
-
     await delay(10000);
-
     await bot.sendMessage(id, TRANSITION_TEXT, {
       reply_markup: KB_EXPERIENCE
     });
-
   } catch (e) {
     console.error('Start error:', e.message);
   }
@@ -226,7 +253,6 @@ bot.on('message', async (msg) => {
     await bot.sendMessage(id, '✅ Фото сохранено!\n\nШаг 2/3: Теперь отправь голосовое сообщение.');
     return;
   }
-
   if (state === 'setup_voice' && msg.voice) {
     const fileId = msg.voice.file_id;
     VOICE_ID = fileId;
@@ -237,7 +263,6 @@ bot.on('message', async (msg) => {
     await bot.sendMessage(id, '✅ Голосовое сохранено!\n\nШаг 3/3: Отправляй скрины результатов по одному.\nКогда закончишь — напиши /done');
     return;
   }
-
   if (state === 'setup_results' && msg.photo) {
     const fileId = msg.photo[msg.photo.length - 1].file_id;
     const buffer = setupBuffer.get(id) || { results: [] };
@@ -246,8 +271,8 @@ bot.on('message', async (msg) => {
     await bot.sendMessage(id, '✅ Скрин ' + buffer.results.length + ' добавлен. Отправляй следующий или напиши /done');
     return;
   }
-
   if (state === 'question' && msg.text && !msg.text.startsWith('/')) {
+    logEvent(id, msg.from.username, 'question_asked', 'question', msg.text.substring(0, 100)); // ANALYTICS
     await bot.sendMessage(ADMIN_ID, '❓ Вопрос от @' + (msg.from.username || id) + ':\n\n' + msg.text);
     await bot.sendMessage(id, "Got it. I'll get back to you shortly. 🤙");
   }
@@ -260,35 +285,36 @@ bot.on('callback_query', async (query) => {
 
   if (data === 'exp_beginner') {
     userState.set(id, 'beginner');
+    logEvent(id, query.from.username, 'button_click', 'experience', 'beginner'); // ANALYTICS
     await bot.sendMessage(id, BEGINNER_TEXT);
     return;
   }
-
   if (data === 'exp_mid' || data === 'exp_pro') {
     userState.set(id, 'pain');
+    logEvent(id, query.from.username, 'button_click', 'experience', data === 'exp_mid' ? 'mid' : 'pro'); // ANALYTICS
     await bot.sendMessage(id, MID_PRO_TEXT, { reply_markup: KB_PAIN });
     return;
   }
-
   if (PAIN_TEXTS[data]) {
     userState.set(id, 'offer');
+    logEvent(id, query.from.username, 'button_click', 'pain', data); // ANALYTICS
     await bot.sendMessage(id, PAIN_TEXTS[data]);
     await delay(1000);
     await bot.sendMessage(id, OFFER_TEXT, { reply_markup: KB_OFFER });
     scheduleFollowUp(id);
     return;
   }
-
   if (data === 'offer_yes') {
     if (userState.get(id) === 'payment') return;
     userState.set(id, 'payment');
+    logEvent(id, query.from.username, 'hot_lead', 'offer', 'yes'); // ANALYTICS
     await bot.sendMessage(id, PAYMENT_TEXT, { reply_markup: KB_PAYMENT });
     await bot.sendMessage(ADMIN_ID, '🔥 Горячий лид!\n@' + (query.from.username || id) + ' нажал "Lets do it"');
     return;
   }
-
   if (data === 'offer_question') {
     userState.set(id, 'question');
+    logEvent(id, query.from.username, 'button_click', 'offer', 'question'); // ANALYTICS
     await bot.sendMessage(id, QUESTION_TEXT);
     await bot.sendMessage(ADMIN_ID, '❓ Лид с вопросом: @' + (query.from.username || id));
     return;
