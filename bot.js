@@ -1,7 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const TOKEN = process.env.BOT_TOKEN || '8724941769:AAGFuNDFWCFzHjL6s4vBhxZlQ_PqD4YHCVE';
 const ADMIN_ID = '587704400';
-const FREE_CHANNEL = 'https://t.me/solcapx';
+const FREE_CHANNEL = 'https://t.me/solcapio';
 const LANDING = 'https://solcap.lol';
 let PHOTO_INTRO_ID = process.env.PHOTO_INTRO_ID || '';
 let VOICE_ID = process.env.VOICE_ID || '';
